@@ -1,0 +1,185 @@
+baseURL: https://usagisang.github.io/
+languageCode: zh-cn
+defaultContentLanguage: zh
+title: "Milky Way"
+pagination.pagerSize: 10
+theme: ["PaperMod"]
+
+hasCJKLanguage: true
+enableEmoji: true
+enableRobotsTXT: true
+buildDrafts: false
+buildFuture: true
+buildExpired: false
+
+minify:
+  disableXML: true
+  minifyOutput: true
+
+params:
+  math: true
+  env: production # to enable google analytics, opengraph, twitter-cards and schema.
+  title: "Milky Way"
+  description: "Simple Blog"
+  keywords: [Blog, Portfolio, PaperMod]
+  author: kigumi
+  # author: ["Me", "You"] # multiple authors
+  images: ["<link or path of image for opengraph, twitter-cards>"]
+  DateFormat: "2006-01-02"
+  defaultTheme: auto # dark, light
+  disableThemeToggle: false
+
+  ShowReadingTime: true
+  ShowShareButtons: true
+  ShowPostNavLinks: true
+  ShowBreadCrumbs: false
+  ShowCodeCopyButtons: true
+  ShowWordCount: false
+  ShowRssButtonInSectionTermList: true
+  UseHugoToc: true
+  disableSpecial1stPost: false
+  disableScrollToTop: false
+  comments: true
+  hidemeta: false
+  hideSummary: false
+  showtoc: true
+  tocopen: true
+
+  assets:
+    # to disable highlight.js
+    disableHLJS: true
+    # disableFingerprinting: true
+    favicon: "/favicon.ico"
+    favicon16x16: "/favicon.ico"
+    favicon32x32: "/favicon.ico"
+    apple_touch_icon: "/favicon.ico"
+    safari_pinned_tab: "/favicon.ico"
+
+  label:
+    text: "Milky Way"
+    icon: /favicon.ico  #/apple-touch-icon.png
+    iconHeight: 35
+
+  # profile-mode
+  profileMode:
+    enabled: false # needs to be explicitly set
+    title: ExampleSite
+    subtitle: "This is subtitle"
+    imageUrl: "<img location>"
+    imageWidth: 120
+    imageHeight: 120
+    imageTitle: my image
+    buttons:
+      - name: Posts
+        url: posts
+      - name: Tags
+        url: tags
+
+  # home-info mode
+  homeInfoParams:
+    Title: "Kigumi"
+    Content: "Make this moment last forever"
+
+  socialIcons:
+    #- name: x
+    #  url: "https://x.com/"
+    #- name: stackoverflow
+    #  url: "https://stackoverflow.com"
+    - name: github
+      url: "https://github.com/usagisang"
+
+  analytics:
+    google:
+      SiteVerificationTag: "XYZabc"
+    bing:
+      SiteVerificationTag: "XYZabc"
+    yandex:
+      SiteVerificationTag: "XYZabc"
+
+  cover:
+    hidden: true # hide everywhere but not in structured data
+    hiddenInList: true # hide on list pages and home
+    hiddenInSingle: true # hide on single page
+
+  #editPost:
+    #URL: "https://github.com/<path_to_repo>/content"
+    #Text: "Suggest Changes" # edit text
+    #appendFilePath: true # to append file path to Edit link
+
+  # for search
+  # https://fusejs.io/api/options.html
+  fuseOpts:
+    isCaseSensitive: false
+    shouldSort: true
+    location: 0
+    distance: 1000
+    threshold: 0.4
+    minMatchCharLength: 0
+    limit: 10 # refer: https://www.fusejs.io/api/methods.html#search
+    keys: ["title", "permalink", "summary", "content"]
+  
+  # utteranc评论设置
+  utteranc:
+    repo: "usagisang/usagisang.github.io"
+    issueTerm: "title"
+    label: "utterances"
+    lightTheme: "github-light"
+    darkTheme: "photon-dark"
+    
+
+menu:
+  main:
+    #- identifier: categories
+    #  name: Categories
+    #  url: /categories/
+    #  weight: 10
+    - identifier: tags
+      name: Tags
+      url: /tags/
+      weight: 20
+    - identifier: search
+      name: Search
+      url: /search/
+      weight: 30
+      
+    #- identifier: example
+    #  name: example.org
+    #  url: https://example.org
+    #  weight: 30
+
+# Read: https://github.com/adityatelange/hugo-PaperMod/wiki/FAQs#using-hugos-syntax-highlighter-chroma
+pygmentsUseClasses: true
+
+# 实现搜索功能
+outputs:
+  home:
+    - HTML
+    - RSS
+    - JSON
+
+markup:
+  # 启用扩展以保留$$内的原始内容
+  goldmark:
+    extensions:
+      passthrough:
+        delimiters:
+          block:
+          # 如果将$$当作block元素并且$$前一行不是空行, 会导致前一行的内容被吞掉
+          # 将$$当作内联元素目前并不影响MathJax解析
+          inline:
+          - - "$"
+            - "$"
+          - - $$
+            - $$
+        enable: true
+
+  highlight:
+    codeFences: true
+    guessSyntax: true
+    noClasses: false
+    style: monokai
+    lineNos: false
+      # anchorLineNos: true
+      # codeFences: true
+      # guessSyntax: true
+      # style: monokai

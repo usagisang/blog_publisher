@@ -1,0 +1,12 @@
+/* 默认隐藏 main 块 */
+.main {
+    opacity: 0;
+    visibility: hidden; /* 确保在渲染完成前不可见 */
+    transition: opacity 0.5s ease-in-out; /* 渐入渐出的动画 */
+}
+
+/* 渲染完成后显示 */
+.main.visible {
+    visibility: visible;
+    opacity: 1;
+}

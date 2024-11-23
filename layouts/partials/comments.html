@@ -1,0 +1,39 @@
+<div id="comments-container" class="comments-container">
+	<br/>
+	<hr style="border-color:#DFDFDF3d;">
+	<section class="article discussion">
+	<script>
+		let currentTheme = window.localStorage.getItem("pref-theme");
+		
+		function loadComment() {
+			let theme = currentTheme == "dark" ? "{{ site.Params.utteranc.darkTheme }}" : "{{ site.Params.utteranc.lightTheme }}";
+			let s = document.createElement("script");
+			s.src = "https://utteranc.es/client.js";
+			s.setAttribute("repo", "{{ site.Params.utteranc.repo }}");
+			s.setAttribute("issue-term", "{{ site.Params.utteranc.issueTerm | default "pathname" }}");
+			s.setAttribute("label", "{{ site.Params.utteranc.label | default "utterances" }}");
+			s.setAttribute("theme", theme);
+			s.setAttribute("crossorigin", "anonymous");
+			s.setAttribute("async", "");
+			document.querySelector("section.article.discussion").innerHTML = "";
+			document.querySelector("section.article.discussion").appendChild(s);
+		}
+		
+		loadComment();
+		
+		// 深色主题适配
+		document.getElementById("theme-toggle").onclick = async ()=> {
+		
+			await new Promise(r => setTimeout(r, 200));
+		
+			let newTheme = window.localStorage.getItem("pref-theme");
+			if (newTheme != currentTheme) {
+				currentTheme = newTheme;
+				loadComment();
+			}
+		};
+	</script>
+	</section>
+</div>
+
+

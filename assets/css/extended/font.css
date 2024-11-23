@@ -1,0 +1,7 @@
+
+
+.post-content pre, code {
+  font-family: "JetBrains Mono", monospace;
+  /**禁用连字符特性**/
+  font-variant-ligatures: none;
+}
