@@ -2,7 +2,6 @@ baseURL: https://usagisang.github.io/
 languageCode: zh-cn
 defaultContentLanguage: zh
 title: "Milky Way"
-pagination.pagerSize: 10
 theme: ["PaperMod"]
 
 hasCJKLanguage: true
@@ -15,6 +14,11 @@ buildExpired: false
 minify:
   disableXML: true
   minifyOutput: true
+  
+pagination:
+  disableAliases: false
+  pagerSize: 5
+  path: page
 
 params:
   math: true
