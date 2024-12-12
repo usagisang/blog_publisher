@@ -2,6 +2,7 @@
 tags: 
 title: SELinux快速入门
 date: 2024-11-27
+
 ---
 
 > 本文大量参考了 Gentoo Linux 文档中与 SELinux 相关的 [wiki](https://wiki.gentoo.org/wiki/SELinux)
@@ -49,9 +50,8 @@ TE 模型规则的底层逻辑可以归结为三个单词组成的句子："**Su
 kind source target:class permissions;
 ```
 
-- kind——有几种选项，常用的是 allow 和 neverallow。allow 表示允许；neverallow 表示不允许；
+- kind——有几种选项，常用的是 allow、neverallow 和 dontaudit。allow 表示允许；neverallow 表示不允许；dontaudit 表示出现对应违规项后静默，不输出任何拒绝日志
 - source——规则的主体的类型。“谁在请求访问”
-
 - target——客体的类型。“请求访问什么”
 - class——类别。正在访问的客体（file、 socket、process 等）的类别
 - permissions——正在执行的操作（或一组操作）（例如，read、write）
@@ -100,11 +100,28 @@ allow appdomain app_data_file:file { read write };
 
 至此，我们总结一下前面的内容。SELinux 绝大部分规则都是基于类型的规则。根据这些类型，SELinux 将授予或拒绝进程对文件的相应操作。多数情况下，在 SELinux 那冗长的上下文中我们只需要关注类型字段，而且由于完整的上下文真的太长了，下文也常常用 SELinux 类型来指代 SELinux 上下文这个概念。
 
+> 我们也可以在定义一个类型的语句中顺便定义这个类型所关联的属性。类型定义语法如下：
+>
+> `type 类型名 [alias { 别名1, 别名2 }] [, 属性1];`
+>
+> 中括号不是语法内容，而是表示这部分内容可写可不写。alias 表示别名部分，可以为类型赋予其他多个别名。逗号后接的内容视为属性部分，同样也可以关联多个属性。比如，下述声明语句：
+>
+> ```
+> type httpd_t, file_type, domain;
+> ```
+>
+> 既定义了一个 SELinux 类型 httpd_t，也将 httpd_t 这个 SELinux 类型关联到属性 file_type 和 domain，它等价于下述语句：
+>
+> ```
+> type httpd_t;
+> typeattribute httpd_t file_type, domain;
+> ```
+
 ## 上下文继承
 
 默认情况下，若 SELinux 中没有其他指定的策略，则新的进程和文件的 SELinux 类型是从其父级继承而来的。比如说：
 
-- 以`foo_t`上下文运行的进程 fork 另外一个新进程时，此进程的上下文也为`foo_t`
+- 以`foo_t`上下文运行的进程 fork 新的子进程时，此进程的上下文也为`foo_t`
 - 在上下文为`bar_t`的目录中创建的文件或目录也将获得`bar_t`上下文
 
 如同所有的进程的源头都是 init 进程一样，追溯 SELinux 的上下文继承体系，也有一个所谓的根上下文。进程和文件的根上下文都由相应的 SELinux 策略定义。一般来说，在 Linux 中文件的根上下文是`root_t`，进程的根上下文是`kernel_t`。
@@ -113,17 +130,23 @@ allow appdomain app_data_file:file { read write };
 
 > [进程如何进入特定的上下文](https://wiki.gentoo.org/wiki/SELinux/Tutorials/How_does_a_process_get_into_a_certain_context)
 
-既然进程有根上下文，那么 SELinux 势必要支持域转换，否则所有的进程只会拥有同一个上下文。不过，不要误会，域转换并不是说一个进程可以动态修改它的 SELinux 类型，SELinux 的域转换只能发生在旧进程创建新进程的时候，旧有的进程可以以不同的安全上下文启动新进程。
+既然进程有根上下文，那么 SELinux 势必要支持域转换，否则所有的进程只会拥有同一个上下文。进程可以通过三种方式进行域转换：
 
-进程可以通过两种方式进行域转换，第一种是为不支持 SELinux （不使用 libselinux ）且对 SELinux 一无所知的应用准备的，第二种是使用 libselinux 相应的 API 来指定新进程的域。但无论如何，定义域转换只是第一步，不要忘记 SELinux 对权限的控制有多严格！SELinux 并不会自动授予相关的允许权限，所以在第二步，我们必须编写相应的 allow 规则以允许域转换。
+- 通过 type_transition 语句自动转换
+- 使用 libselinux 中的 setexeccon()
+- 使用 libselinux 中的 setcon()
 
-### 定义域转换
+第一种是为不支持 SELinux （不使用 libselinux ）且对 SELinux 一无所知的应用准备的；后两种则需要引入 libselinux 。`setexeccon()`函数可以指定下一次调用`exec()`后新进程的上下文，而`setcon()`最为特殊，它可以直接改变当前进程的上下文。
 
-进程可以通过两种方式来定义域转换。
+无论进程采用哪一种方式，SELinux 并不会自动许可域转换，所以我们在确定好哪些域要转换后，还必须编写相应的 allow 规则来放行这些转换。
 
-#### type_transition语句
+> 虽然从系统的角度来看，`exec()`并不会诞生新进程，但我们姑且把一个进程替换自身代码段的行为称之“创建”了新进程。
 
-这是最常用的方式。当不支持 SELinux 的程序执行`exec`系统调用时，SELinux 将自动为其进行域转换。定义语句的示例如下：
+### type_transition语句
+
+这是最常用的方式。我们知道，默认情况下，在新旧进程之间，域将原封不动地继承，但`type_transition`定义可以改变这种默认行为。一旦满足条件，SELinux 将根据`type_transition`语句决定新进程的域，域转换自动发生。
+
+`type_transition`定义的示例如下：
 
 ```
 type_transition init_t initrc_exec_t : process initrc_t;
@@ -133,11 +156,11 @@ type_transition init_t initrc_exec_t : process initrc_t;
 
 上面的示例展示了定义域转换所需的三个要素：原来的域，可执行文件的类型，新的域。
 
-采用这种方式定义域转换不存在侵入性，因而非常适合那些不方便引入 libselinux 库的程序，init 进程就是一个很好的例子——即使没有 libselinux，init 进程也应该正常地初始化整个环境。
+采用这种方式定义域转换不存在侵入性，因而非常适合那些不方便引入 libselinux 库的程序。即使应用程序引入了 libselinux，也经常依赖`type_transition`语句进行自动域转换。
 
-#### 使用 libselinux 中的 setexeccon()
+### 使用 libselinux 中的 setexeccon()
 
-支持 SELinux 的应用可以使用 libselinux 中的 setexeccon() 来指定新进程的域。这个函数将设置用于下一个 exec 调用的上下文。另外，应用必须具有 setexec 权限才能使用这个 API，例如：
+支持 SELinux 的应用可以使用 libselinux 中的 setexeccon()，这个函数将设置用于下一个`exec()`调用的上下文。另外，应用必须具有 setexec 权限才能使用这个 API，例如：
 
 ```
 allow crond_t self:process setexec;
@@ -145,15 +168,25 @@ allow crond_t self:process setexec;
 
 `self:process`是一种特殊的客体写法，但应该不难理解，它指明客体就是主体的这个进程。
 
-### 允许域转换
+### 使用 libselinux 中的 setcon()
 
-无论使用哪种方式定义了域转换，这种转换最终都和`exec()`系统调用脱不开关系。而为了允许域转换，我们需要额外添加三条 allow 规则。这些策略用来满足以下三个条件：
+应用还可以使用`setcon()`函数直接切换当前进程的上下文。和`setexeccon()`一样，进程执行`setcon()`也需要一个特殊的 SELinux 权限`setcurrent`。
+
+```
+allow crond_t self:process setcurrent;
+```
+
+使用这个 API 有一些额外的限制，比如，如果应用使用多线程，那么必须在创建任何子线程之前执行`setcon()`，这种情况下后续创建的所有子线程都将继承新的上下文。但是如果调用`setcon()`时同一进程中还有其他线程在运行，此调用将失败。
+
+### 域转换许可规则
+
+如果域转换最终需要执行`exec()`才生效（对应第一种和第二种域转换方式），那么，我们就需要添加三条 allow 规则来许可域转换。这些策略用来满足以下三个条件：
 
 1. 原始域对文件具有执行权限
 2. 文件上下文本身被标识为目标域的入口点（entrypoint）
 3. 允许原始域转换到目标域
 
-我们以`initrc_t`进程通过执行`sshd_exec_t`文件来将新进程转换到`sshd_t`这个域为例。
+我们以`initrc_t`进程通过执行`sshd_exec_t`文件来转换到`sshd_t`这个域为例。
 
 首先，`exec()`调用需要指定某个可执行文件，这当然需要授予一个允许进程执行文件的权限。比如，允许`initrc_t`进程执行`sshd_exec_t`文件：
 
@@ -176,6 +209,16 @@ allow initrc_t sshd_t:process transition;
 ```
 
 为什么我们最后需要定义一个 allow 规则来允许一个域向另一个域转换？这是因为一个文件可以成为多个域的 entrypoint，比如说，`sshd_exec_t`同时还是`xm_ssh_t`域和`ssh_t`域的 entrypoint。因此，SELinux 不允许一个域获得一个文件的执行权限就可以根据 entrypoint 定义转换到其他所有域， SELinux 要求明确指出，从哪个域到哪个域的转换才是被允许的。
+
+-----
+
+如果应用使用`setcon()`直接切换本进程的上下文，那么，我们需要添加对目标上下文的`dyntransition`操作的 allow 规则，表明一个上下文可以“动态”切换到目标上下文。
+
+```
+allow adbd su:process dyntransition;
+```
+
+这是 Android 中的 SELinux 规则的一个例子，它表明在 adbd 域中的进程可以动态切换到 su 域中。
 
 ## 客体的类型转换
 
@@ -259,6 +302,7 @@ SELinux 角色可以用于实现 RBAC （Role-Based Access Control，基于角�
 1. 在日志中发现的拒绝并非都是大问题。有些拒绝只是表面上发生了，但不会影响应用程序的行为。这通常是由于应用程序开发不当（例如未正确关闭文件描述符）或由于高级库函数（应用程序仅使用了一小部分功能）造成的。
 2. 拒绝一出现就会被记录下来。这意味着在日志中我们将看到大量的拒绝，尽管许多拒绝彼此相关（一个拒绝导致另一个拒绝），但大部分拒绝与正在调查的问题无关。
 3. 如果连续出现太多拒绝，Linux 内核可能会抑制这些拒绝。因此可能看不到 SELinux 报告的所有内容。
+4. `dontaudit`会抑制拒绝日志的输出，因此，不要太依赖日志，必要的时候请 review 相应的 SELinux 策略。
 
 拒绝日志的示例如下：
 
@@ -270,19 +314,19 @@ tclass=chr_file permissive=1
 
 下表给出了每一部分日志的解释
 
-| 日志                 | 描述                                                                                 |
-| ------------------ | ---------------------------------------------------------------------------------- |
-| avc:               | 告知用户这是哪种类型的日志条目。在本例中，这是 AVC 日志条目。                                                  |
+| 日志               | 描述                                                         |
+| ------------------ | ------------------------------------------------------------ |
+| avc:               | 告知用户这是哪种类型的日志条目。在本例中，这是 AVC 日志条目。 |
 | denied             | SELinux 最终的反应，可以是 denied 或 granted。注意，如果 SELinux 处于宽容模式，尽管实际没有拒绝，在日志中依然会被记录 denied |
-| \{ open \}         | 试图执行的操作，有时会包含一组操作，如\{ read write \}                                                |
-| pid=1003           | 进程 pid                                                                             |
-| comm=”mediaserver” | 进程命令（不带参数，且限制为 15 个字符），帮助用户在进程已经死亡的情况下识别该进程是什么                                     |
-| path=              | 目标的绝对路径。注意，此字段很大程度上取决于目标类别，因此可能是path=、name=、capacity=、src= 等等                      |
-| dev="tmpfs"        | 目标所在的设备                                                                            |
-| scontext=          | 进程的上下文（域）                                                                          |
-| tcontext=          | 目标资源（本例中为文件）的上下文                                                                   |
-| tclass=            | 目标的类别                                                                              |
-| permissive=1       | 表示是否允许此次操作，为1表示允许                                                                  |
+| \{ open \}         | 试图执行的操作，有时会包含一组操作，如\{ read write \}       |
+| pid=1003           | 进程 pid                                                     |
+| comm=”mediaserver” | 进程命令（不带参数，且限制为 15 个字符），帮助用户在进程已经死亡的情况下识别该进程是什么 |
+| path=              | 目标的绝对路径。注意，此字段很大程度上取决于目标类别，因此可能是path=、name=、capacity=、src= 等等 |
+| dev="tmpfs"        | 目标所在的设备                                               |
+| scontext=          | 进程的上下文（域）                                           |
+| tcontext=          | 目标资源（本例中为文件）的上下文                             |
+| tclass=            | 目标的类别                                                   |
+| permissive=1       | 表示是否允许此次操作，为1表示允许                            |
 
 ## 本文的SELinux策略语法
 
