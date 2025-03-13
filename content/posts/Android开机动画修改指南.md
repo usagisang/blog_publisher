@@ -5,7 +5,7 @@ title: Android开机动画修改指南
 date: 2024-01-29
 ---
 
-> 本文内容的基本骨架来源于对 frameworks/base/cmds/bootanimation/FORMAT.md 的整合翻译。以下介绍的所有内容只适用于 AOSP ，厂商可针对 BootAnimation.cpp 进行魔改，请以具体代码为准。
+> 本文大部分内容来源于对 frameworks/base/cmds/bootanimation/FORMAT.md 的整合翻译。以下介绍的所有内容只适用于 AOSP ，厂商可针对 BootAnimation.cpp 进行魔改，请以具体代码为准。
 
 ## 开机动画文件路径
 
@@ -23,7 +23,39 @@ date: 2024-01-29
 
 - **注释2**：`vold.decrypt`属性表明此 Android 系统开启了全盘加密。[全盘加密](https://source.android.com/docs/security/encryption/full-disk)特性从 Android 10 开始已被废弃，只有在启用此特性的机器上才需要特别关注`bootanimation-encrypted.zip`文件。
 
-## 文件结构
+> [!TIP]
+>
+> 如果上面列举的所有路径都没有动画文件 bootanimation.zip，那么`BootAnimation`将会记录日志：“No animation file”，并显示默认的 android 图标动画。
+>
+> ```cpp
+> // frameworks/base/cmds/bootanimation/BootAnimation.cpp
+> bool BootAnimation::threadLoop() {
+>     // We have no bootanimation file, so we use the stock android logo
+>     // animation.
+>     if (mZipFileName.empty()) {
+>         ALOGD("No animation file");
+>         result = android();
+>     } else {
+>         result = movie();
+>     }
+> }
+> ```
+>
+> `android()`函数会从 res 资源里加载两张图片用于默认的动画：
+>
+> ```cpp
+> // frameworks/base/cmds/bootanimation/BootAnimation.cpp
+> bool BootAnimation::android() {
+>     SLOGD("%sAnimationShownTiming start time: %" PRId64 "ms", mShuttingDown ? "Shutdown" : "Boot",
+>             elapsedRealtime());
+>     initTexture(&mAndroid[0], mAssets, "images/android-logo-mask.png");
+>     initTexture(&mAndroid[1], mAssets, "images/android-logo-shine.png");
+> }
+> ```
+>
+> 这两张图片位于`frameworks/base/core/res/assets/images/`
+
+## bootanimation.zip的文件结构
 
 `bootanimation.zip`一般包含以下文件：
 
@@ -253,3 +285,34 @@ adb shell setprop ctl.start bootanim
 adb shell setprop service.bootanim.exit 1
 ```
 
+## 技巧-单图片冒充动画
+
+利用好 bootanimation 设计的一些机制，我们可以做到使用一张图片来“冒充”动画，从而实现展示静态图的功能。下面展示一例配置细节：
+
+zip 文件的整体结构如下：
+
+```
+$ tree bootanimation/
+bootanimation/
+├── desc.txt
+├── part0
+│   └── 0000.png
+└── part1
+    └── 0001.png
+```
+
+desc.txt 文件参考配置如下：
+
+```txt
+1440 1024 1
+p 0 60 part0 #005be5
+p 0 0 part1 #005be5
+```
+
+**注：图片宽高和背景颜色请根据实际情况自行调整。**
+
+为了让静态图持续展示，上述配置做了三件事情。首先，bootanimation.zip 至少需要包含两段动画。其次，我们将 fps 参数降低至1。最后，我们允许最开始的第一段动画 part0 延时 60 帧才去渲染下一段动画 part1，由于我们的 fps 为1，因此实际上延时了 60 秒，这对绝大多数用途来说已经足够了。 
+
+- 为什么需要两段动画？只保留第一段可以吗？
+
+答案是不可以，part0 后必须有 part1，延时 60 帧配置才会生效。
